@@ -10,8 +10,8 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include "Keypad.c"
-#include "Global.c"
+#include "ejack023_lab10_part1_Keypad.c"
+#include "ejack023_lab10_part1_Global.c"
 #ifdef _SIMULATE_
 #include "simAVRHeader.h"
 #endif
