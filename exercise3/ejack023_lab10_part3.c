@@ -1,17 +1,18 @@
 /*	Author: ejack023
  *	 *	Lab Section: 023
- *	  *	Assignment: Lab #10  Exercise #2
+ *	  *	Assignment: Lab #10  Exercise #3
  *	   *
  *	    *	I acknowledge all content contained herein, excluding template or example
  *	     *	code, is my own original work.
  *	      *
- *	       *	Demo Link: https://www.youtube.com/watch?v=iwcx4O4iBjs&ab_channel=EthanJackson
+ *	       *	Demo Link: https://www.youtube.com/watch?v=y2Tg0oMfe40&ab_channel=EthanJackson
  *	        */
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include "Keypad.c"
 #include "Global.c"
+#include "Audio.c"
 #ifdef _SIMULATE_
 #include "simAVRHeader.h"
 #endif
@@ -32,13 +33,21 @@ int displayLockSMTick(int state);
 enum checkCombo_States { checkCombo_waitRelease, checkCombo_wait, checkCombo_getNext, checkCombo_failRelease, checkCombo_successRelease, checkCombo_fail, checkCombo_unlock } checkCombo_State;
 int checkComboSMTick(int state);
 
+enum doorbell_States { doorbell_wait, doorbell_play } doorbell_State;
+int doorbellSMTick(int state);
+
 int main(void)
 {
+	DDRA = 0x00; PORTA = 0xFF;
 	DDRB = 0x7F; PORTB = 0x80;
 	DDRC = 0xF0; PORTC = 0x0F;
 	
-	task tasks[3];
-	const unsigned char tasksNum = 3;
+	PWM_off();
+	TimerSet(200);
+	TimerOn();
+	
+	task tasks[4];
+	const unsigned char tasksNum = 4;
 	unsigned char i = 0;
 	tasks[i].state = checkCombo_fail;
 	tasks[i].TickFct = &checkComboSMTick;
@@ -48,11 +57,16 @@ int main(void)
 	++i;
 	tasks[i].state = displayLock_lock;
 	tasks[i].TickFct = &displayLockSMTick;
+	++i;
+	tasks[i].state = doorbell_wait;
+	tasks[i].TickFct = &doorbellSMTick;
 	
 	while(1) {
 		for (i = 0; i < tasksNum; ++i) {
 			tasks[i].state = tasks[i].TickFct(tasks[i].state);
 		}
+		while(!TimerFlag); 
+		TimerFlag = 0;
 	}
 }
 
@@ -89,7 +103,7 @@ int displayLockSMTick(int state) {
 			break;
 		default: break;
 	}
-	PORTB = output ? PORTB | 0x01 : PORTB & 0x80;
+	PORTB = output ? PORTB | 0x01 : PORTB & 0xFE;
 	return state;
 }
 
@@ -99,7 +113,7 @@ int checkComboSMTick(int state) {
 		case checkCombo_fail:
 			if (key_output == '#') {
 				comboPos = 0;
-				state = checkCombo_waitRelease; 
+				state = checkCombo_waitRelease;
 			}
 			break;
 		case checkCombo_waitRelease:
@@ -132,6 +146,40 @@ int checkComboSMTick(int state) {
 	switch (state) {
 		case checkCombo_unlock:
 			locked = 0;
+			break;
+		default: break;
+	}
+	return state;
+}
+
+int doorbellSMTick(int state) {
+	unsigned char btn = ~PINA & 0x80;
+	static unsigned char duration;
+	static unsigned char seqNum;
+	switch(state) {
+		case doorbell_wait:
+			if (btn) {
+				PWM_on();
+				duration = (durations[seqNum]);
+				state = doorbell_play;
+			}
+			break;
+		case doorbell_play:
+			if (seqNum > 13) {
+				PWM_off();
+				seqNum = 0;
+				state = doorbell_wait;
+			}
+			break;
+		default: break;
+	}
+	switch(state) {
+		case doorbell_play:
+			set_PWM(notes[sequence[seqNum]]);
+			--duration;
+			if (duration <= 0) {
+				duration = (durations[++seqNum]);
+			}
 			break;
 		default: break;
 	}
